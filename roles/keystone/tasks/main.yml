@@ -1,0 +1,104 @@
+---
+##sudo mysql
+##CREATE DATABASE keystone;
+
+- name: Logging in to mysql and Create keystone database
+  community.mysql.mysql_query:
+    login_db: keystone
+    query: GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '1234';
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Logging in to mysql and Create keystone database
+  community.mysql.mysql_query:
+    login_db: keystone
+    query: GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' IDENTIFIED BY '1234';
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+##Installing the mod_wsgi    
+- name: Install the prerequisites for mod_wsgi
+  apt:
+    name:
+       - apache2
+       - apache2-utils
+       - libexpat1
+       - ssl-cert
+       - python3
+       - libapache2-mod-wsgi-py3
+  when: ansible_distribution == "Ubuntu"
+
+- name:
+  copy:
+    dest: /var/www/html/test_script.py
+    content: |
+      def application(environ,start_response):
+          status = '200 OK'
+          html = '\n' \
+                 '\n' \
+                 ' mod_wsgi is working \n' \
+                 '\n' \
+                 '\n'
+          response_header = [('Content-type','text/html')]
+          start_response(status,response_header)
+          return [html]
+
+- name: Create a seperate apache config to serve our python script over HTTP
+  copy:
+    dest: /etc/apache2/conf-available/wsgi.conf
+    content: |
+      WSGIScriptAlias /test_wsgi /var/www/html/test_script.py
+
+#- name: restart apache server
+#  shell: sudo systemctl restart apache2
+       
+- name: install the keystone package
+  apt:
+    name: keystone
+  when: ansible_distribution == "Ubuntu"
+
+#editing the [database] /etc/keystone/keystone.conf 
+#editing the [token] /etc/keystone/keystone.conf 
+#LINK: docs.openstack.org/keystone/yoga/install/keystone-install-ubuntu.html
+
+#- name: populate the identity service repositories
+#  shell: su -s /bin/sh -c "keystone-manage db_sync" keystone
+#  when: ansible_distribution == "Ubuntu"
+
+- name: initializing the fernet repositories (1)
+  shell: keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+  when: ansible_distribution == "Ubuntu"
+
+- name: initializing the fernet repositories (2)
+  shell: keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+
+#- name: bootstrap the identity service (1)
+#  shell: keystone-manage bootstrap --bootstrap-password 1234 --bootstrap-admin-url http://controller:5000/v3/ --bootstrap-internal-url http://controller:5000/v3/ --bootstrap-public-url http://controller:5000/v3/ --bootstrap-region-id RegionOne
+
+- name: configure apache http server
+  copy:
+    dest: /etc/apache2/apache2.conf
+    content: |
+      ServerName controller
+  when: ansible_distribution == "Ubuntu"
+
+- name: configuring administrative account by setting the proper environmental variables (1)
+  shell: export OS_USERNAME=admin
+
+- name: configuring administrative account by setting the proper environmental variables (2)
+  shell: export OS_PASSWORD=1234
+
+- name: configuring administrative account by setting the proper environmental variables (3)
+  shell: export OS_PROJECT_NAME=admin
+
+- name: configuring administrative account by setting the proper environmental variables(4)
+  shell: OS_USER_DOMAIN_NAME=Default
+
+- name: configuring administrative account by setting the proper environmental variables(5)
+  shell: OS_PROJECT_DOMAIN_NAME=Default
+
+- name: configuring administrative account by setting the proper environmental variables(6)
+  shell: OS_AUTH_URL=http://controller:5000/v3
+
+- name: configuring administrative account by setting the proper environmental variables (7)
+  shell: OS_IDENTITY_API_VERSION=3
+
+

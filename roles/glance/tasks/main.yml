@@ -1,0 +1,118 @@
+---
+#prereq
+##sudo mysql
+##CREATE DATABASE keystone;
+
+- name: Logging in to mysql and Create keystone database
+  community.mysql.mysql_query:
+    login_db: glance
+    query: GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY '1234';
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Logging in to mysql and Create keystone database
+  community.mysql.mysql_query:
+    login_db: keystone
+    query: GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY '1234';
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+
+#- name:  source the admin credential to gain access to admin-only CLI commands
+#  shell: . admin-openrc
+#  when: ansible_distribution == "Ubuntu" 
+
+#- name: create service credentials 
+#  shell: openstack user create --domain default --password-prompt glance
+#  when: ansible_distribution == "Ubuntu"
+
+#- name: adding the admin role to the glance user and service project
+#  shell: openstack role add --project service --user glance admin
+#  when: ansible_distribution == "Ubuntu"
+
+#- name: create the glance service entity
+#  shell: openstack service create --name glance --description "OpenStack Image" image
+#  when: ansible_distribution == "Ubuntu"
+
+#- name: create the image service API endpoints (1)
+#  shell: openstack endpoint create --region RegionOne image public http://controller:9292
+#  when: ansible_distribution == "Ubuntu"
+
+#- name: create the image service API endpoints (2)
+#  shell: openstack endpoint create --region RegionOne image internal http://controller:9292
+#  when: ansible_distribution == "Ubuntu"
+
+#- name: create the image service API endpoints (3)
+#  shell: openstack endpoint create --region RegionOne image admin http://controller:9292
+#  when: ansible_distribution == "Ubuntu"
+
+##Register quota limits (Optional)
+
+##install and config
+- name: install and configure components of glance
+  apt:
+    name: glance
+  when: ansible_distribution == "Ubuntu"
+
+#editing the [database] /etc/glance/glance-api.conf 
+
+- name: configuring database access
+  copy:
+    dest: /etc/glance/glance-api.conf
+    content: |
+      [database]
+      connection = mysql+pymysql://glance:1234@controller/glance
+
+      [keystone_authtoken]
+      www_authenicate_uri =  http://controller:5000
+      auth_url = http://controller:5000
+      memcached_servers = controller:11211
+      auth_type = password
+      project_domain_name = Default
+      user_domain_name = Default
+      project_name = service
+      username = glance
+      password = 1234
+
+      [paste_deploy]
+      flavor = keystone
+
+- name: configuring the local file system store and location of image files
+  copy:
+    dest: /etc/glance/glance-api.conf
+    content: |
+      [glance_store]
+      stores = file, http
+      default_store = file
+      filesystem_store_datadir = /var/lib/glance/images/
+
+- name: configuring the access to keystone
+  copy:
+    dest: /etc/glance/glance-api.conf
+    content: |
+      [oslo_limit]
+      auth_url = http://controller:5000
+      auth_type = password
+      user_domain_id = default
+      username = MY_SERVICE
+      system_scope = all
+      password = 1234
+      endpoint_id = ENDPOINT_ID
+      region_name = RegionOne
+
+- name: enable per-tenant quotas
+  copy:
+    dest: /etc/glance/glance-api.conf
+    content: |
+      [DEFAULT]
+      use_keystone_quotas = True
+
+#- name: MY_SERVICE read access to systemscope resources
+#  shell: openstack role add --user MY_SERVICE --user-domain Default --system all reader
+#  when: ansible_distribution == "Ubuntu"
+
+#- name: populate the image service database
+#  shell: su -s  /bin/sh -c "glance-manage db_sync" glance
+#  when: ansible_distribution == "Ubuntu"
+
+- name: restart the image services
+  shell: service glance-api restart
+  when: ansible_distribution == "Ubuntu"

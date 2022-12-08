@@ -1,0 +1,84 @@
+---
+##Install and configure a computer node for Ubuntu
+- name: install the packages
+  apt:
+    name: nova-compute
+  when: ansible_distribution == "Ubuntu"
+
+- name: configuring RabbitMQ message queue access
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [DEFAULT]
+      tranport_url = rabbit://openstack:1234@controller
+      my_ip = 192.168.56.119
+
+- name: configuring identity service access (1)
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [api]
+      auth_strategy = keystone
+
+- name: configuring identity service access (2)
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [keystone_authtoken]
+      www_authenticate_uri = http://controller:5000/
+      auth_url = http://controller:5000/
+      memcached_servers = controller:11211
+      auth_type = password
+      project_domain_name: Default
+      user_domain_name = Default
+      project_name = service
+      username = nova
+      password = 1234
+
+- name: enable and configure remote console access
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [vnc]
+      enabled = true
+      server_listen = 0.0.0.0
+      server_proxyclient_address = $my_ip
+      novncproxy_base_url = http://controller:6080/vnc_auto.html
+
+- name: configure the location of the image service API
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [glance]
+      api_servers = http://controller:9292
+
+- name: configure the lock path
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [solo_currency]
+      lock_path = /var/lib/nova/tmp
+
+- name: configure the placement API
+  copy:
+    dest: /etc/nova/nova.conf
+    content: |
+      [placement]
+      region_name = RegionOne
+      project_domain_name = Default
+      project_name = service
+      auth_type = password
+      user_domain_name = Default
+      auth_url = http://controller:5000/v3
+      username = placement
+      password = 1234
+
+- name: configuring to make the computer node to support hardware acceleration
+  copy:
+    dest: /etc/nova/nova-compute.conf
+    content: |
+      [libvirt]
+      virt_type = qemu
+
+- name: restarting the computer service
+  shell: service nova-compute restart
